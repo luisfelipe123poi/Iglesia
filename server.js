@@ -6,8 +6,11 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Conexión a MongoDB (Usa tu URI de MongoDB Atlas)
-const MONGO_URI = process.env.MONGO_URI || "tu_mongodb_connection_string";
+// CONEXIÓN ROBUSTA A MONGODB ATLAS
+// Limpia comillas dobles, simples y espacios accidentales del env o string por defecto
+const RAW_MONGO_URI = process.env.MONGO_URI || "mongodb+srv://garciaborjabertha_db_user:ZA1QzbIcKgPs0SkV@cluster0.ywee9hu.mongodb.net/iglesia_db?appName=Cluster0";
+const MONGO_URI = RAW_MONGO_URI.replace(/['"]+/g, '').trim();
+
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Conectado a MongoDB Atlas'))
   .catch(err => console.error('❌ Error de conexión:', err));
