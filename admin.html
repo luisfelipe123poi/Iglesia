@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Gestión de Transmisiones</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bg: #050c1a; --card: #0b192e; --gold: #d4af37; --danger: #ef4444; --text: #e2e8f0; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 2rem; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .card { background: var(--card); border: 1px solid rgba(212,175,55,0.2); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; }
+        h1, h2 { color: var(--gold); margin-bottom: 1rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        input, select { width: 100%; padding: 0.75rem; background: #0f233d; border: 1px solid #1e3a5f; color: white; border-radius: 6px; box-sizing: border-box; }
+        button { background: var(--gold); color: black; font-weight: bold; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; margin-top: 1rem; }
+        button:hover { opacity: 0.9; }
+        .btn-danger { background: var(--danger); color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.8rem; border-bottom: 1px solid #1e3a5f; text-align: left; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1><i class="fa-solid fa-user-shield"></i> Panel de Control</h1>
+
+    <!-- CREDENCIALES Y BANNER -->
+    <div class="card">
+        <h2>Clave Secreta & Banner de Emergencia</h2>
+        <div class="grid">
+            <div>
+                <label>Clave Admin:</label>
+                <input type="password" id="adminSecret" placeholder="Ingresa tu clave secreta" value="ClaveSecretaIglesia2026">
+            </div>
+            <div>
+                <label>Estado Banner "EN VIVO":</label>
+                <select id="bannerActivo">
+                    <option value="false">Desactivado</option>
+                    <option value="true">🔴 ACTIVADO (Mostrar Banner en la Web)</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <label>Enlace del En Vivo Actual:</label>
+            <input type="text" id="bannerLink" placeholder="https://youtube.com/live/...">
+        </div>
+        <button onclick="guardarBanner()"><i class="fa-solid fa-broadcast-tower"></i> Actualizar Banner</button>
+    </div>
+
+    <!-- GUARDAR / EDITAR ACTIVIDAD -->
+    <div class="card">
+        <h2>Agregar / Editar Actividad</h2>
+        <form id="actividadForm" onsubmit="guardarActividad(event)">
+            <input type="hidden" id="actividadId">
+            <div class="grid">
+                <div>
+                    <label>Título:</label>
+                    <input type="text" id="titulo" required placeholder="Ej: Culto Celebrativo">
+                </div>
+                <div>
+                    <label>Día:</label>
+                    <select id="dia">
+                        <option value="Domingo">Domingo</option>
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miércoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sábado">Sábado</option>
+                        <option value="Especial">Fecha Especial</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Hora:</label>
+                    <input type="text" id="hora" required placeholder="Ej: 07:00 PM">
+                </div>
+                <div>
+                    <label>Plataforma:</label>
+                    <input type="text" id="plataforma" required placeholder="Ej: YouTube Live / Zoom">
+                </div>
+            </div>
+            <div class="grid" style="margin-top: 1rem;">
+                <div>
+                    <label>Enlace Directo:</label>
+                    <input type="text" id="link" required placeholder="https://...">
+                </div>
+                <div>
+                    <label>Estado:</label>
+                    <select id="estado">
+                        <option value="PROXIMAMENTE">PROXIMAMENTE</option>
+                        <option value="EN VIVO">🔴 EN VIVO AHORA</option>
+                        <option value="CANCELADA">🚫 CANCELADA HOY</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar Actividad</button>
+        </form>
+    </div>
+
+    <!-- LISTADO -->
+    <div class="card">
+        <h2>Actividades Registradas</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Día</th>
+                    <th>Hora</th>
+                    <th>Actividad</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tablaActividades"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // CAMBIA ESTA URL POR LA DE TU SERVIDOR EN RENDER
+    const API_URL = "https://tu-app-en-render.onrender.com/api";
+
+    function getHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'x-admin-secret': document.getElementById('adminSecret').value
+        };
+    }
+
+    async function cargarDatos() {
+        try {
+            // Cargar Banner
+            const resBanner = await fetch(`${API_URL}/banner`);
+            const banner = await resBanner.json();
+            document.getElementById('bannerActivo').value = banner.activo ? "true" : "false";
+            document.getElementById('bannerLink').value = banner.link || "";
+
+            // Cargar Actividades
+            const resAct = await fetch(`${API_URL}/actividades`);
+            const actividades = await resAct.json();
+
+            const tbody = document.getElementById('tablaActividades');
+            tbody.innerHTML = '';
+            actividades.forEach(a => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${a.dia}</strong></td>
+                        <td>${a.hora}</td>
+                        <td>${a.actividad}</td>
+                        <td><strong>${a.estado}</strong></td>
+                        <td>
+                            <button onclick="editar('${a._id}', '${a.dia}', '${a.hora}', '${a.actividad}', '${a.plataforma}', '${a.link}', '${a.estado}')" style="margin:0; padding: 0.3rem 0.6rem;"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn-danger" onclick="eliminar('${a._id}')" style="margin:0; padding: 0.3rem 0.6rem;"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function guardarBanner() {
+        const activo = document.getElementById('bannerActivo').value === "true";
+        const link = document.getElementById('bannerLink').value;
+
+        await fetch(`${API_URL}/banner`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ activo, link })
+        });
+        alert('Banner actualizado');
+    }
+
+    async function guardarActividad(e) {
+        e.preventDefault();
+        const body = {
+            id: document.getElementById('actividadId').value || undefined,
+            dia: document.getElementById('dia').value,
+            hora: document.getElementById('hora').value,
+            actividad: document.getElementById('titulo').value,
+            plataforma: document.getElementById('plataforma').value,
+            link: document.getElementById('link').value,
+            estado: document.getElementById('estado').value
+        };
+
+        await fetch(`${API_URL}/actividades`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(body)
+        });
+
+        document.getElementById('actividadForm').reset();
+        document.getElementById('actividadId').value = '';
+        cargarDatos();
+    }
+
+    function editar(id, dia, hora, actividad, plataforma, link, estado) {
+        document.getElementById('actividadId').value = id;
+        document.getElementById('dia').value = dia;
+        document.getElementById('hora').value = hora;
+        document.getElementById('titulo').value = actividad;
+        document.getElementById('plataforma').value = plataforma;
+        document.getElementById('link').value = link;
+        document.getElementById('estado').value = estado;
+    }
+
+    async function eliminar(id) {
+        if (!confirm('¿Eliminar actividad?')) return;
+        await fetch(`${API_URL}/actividades/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        cargarDatos();
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarDatos);
+</script>
+
+</body>
+</html>
