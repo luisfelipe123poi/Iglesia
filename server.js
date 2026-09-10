@@ -20,6 +20,14 @@ mongoose.connect(MONGO_URI)
 // Clave secreta para proteger acciones del Admin
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "ClaveSecretaIglesia2026";
 
+// FUNCIÓN AUXILIAR PARA EXTRAER EL ID DE YOUTUBE DE CUALQUIER URL
+function extractYouTubeId(urlOrId) {
+    if (!urlOrId) return "dQw4w9WgXcQ";
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = urlOrId.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : urlOrId.trim();
+}
+
 // MODELOS DE DATOS
 const ActividadSchema = new mongoose.Schema({
     dia: String,
@@ -47,8 +55,13 @@ const BannerSchema = new mongoose.Schema({
     mensaje: String
 });
 
+const MediaSchema = new mongoose.Schema({
+    youtubeVideoId: { type: String, default: 'dQw4w9WgXcQ' }
+}, { timestamps: true });
+
 const Actividad = mongoose.model('Actividad', ActividadSchema);
 const Banner = mongoose.model('Banner', BannerSchema);
+const Media = mongoose.model('Media', MediaSchema);
 
 // Middleware para verificar clave Admin
 const checkAuth = (req, res, next) => {
@@ -82,6 +95,19 @@ app.get('/api/banner', async (req, res) => {
             });
         }
         res.json(banner);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Ruta pública para obtener el video de la semana actual
+app.get('/api/media/weekly-video', async (req, res) => {
+    try {
+        let media = await Media.findOne();
+        if (!media) {
+            media = await Media.create({ youtubeVideoId: 'dQw4w9WgXcQ' });
+        }
+        res.json({ success: true, videoId: media.youtubeVideoId });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -188,6 +214,26 @@ app.post('/api/banner', checkAuth, async (req, res) => {
             banner = await Banner.create({ activo, link, mensaje });
         }
         res.json(banner);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Ruta privada para actualizar el video de la semana desde el Panel Admin
+app.post('/api/media/weekly-video', checkAuth, async (req, res) => {
+    try {
+        const { videoUrlOrId } = req.body;
+        const videoId = extractYouTubeId(videoUrlOrId);
+
+        let media = await Media.findOne();
+        if (media) {
+            media.youtubeVideoId = videoId;
+            await media.save();
+        } else {
+            media = await Media.create({ youtubeVideoId: videoId });
+        }
+
+        res.json({ success: true, message: 'Video de la semana actualizado correctamente', videoId: media.youtubeVideoId });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
