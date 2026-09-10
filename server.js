@@ -20,12 +20,24 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || "ClaveSecretaIglesia2026";
 
 // MODELOS DE DATOS
 const ActividadSchema = new mongoose.Schema({
-    dia: String,         // Ej: "Domingo", "Especial"
-    hora: String,        // Ej: "07:00 PM"
-    actividad: String,   // Ej: "Culto Celebrativo"
-    plataforma: String,  // Ej: "YouTube Live", "Zoom"
-    link: String,        // Ej: "https://..."
-    estado: String       // "EN VIVO", "PROXIMAMENTE", "CANCELADA"
+    // Campos de compatibilidad y nombres principales
+    dia: String,           // Ej: "Domingo", "Especial"
+    diaSemana: String,     // Alias para la web
+    hora: String,          // Ej: "07:00 PM"
+    horaInicio: String,    // Alias para la web
+    actividad: String,     // Ej: "Culto Celebrativo"
+    titulo: String,        // Alias para la web
+    plataforma: String,    // Ej: "YouTube Live", "Zoom"
+    link: String,          // Ej: "https://..."
+    linkTransmision: String, // Alias para la web
+    estado: String,        // "EN VIVO", "PROXIMAMENTE", "CANCELADA"
+    
+    // Nuevos campos multimedia y del orador
+    imagenUrl: String,       // URL del banner o portada del evento
+    oradorFotoUrl: String,   // URL de la foto del predicador/orador
+    nombreOrador: String,    // Ej: "Pastor Principal / Apóstol Juan"
+    esInvitado: { type: Boolean, default: false }, // Indicador si es orador invitado
+    descripcion: String      // Resumen o detalles del tema
 }, { timestamps: true });
 
 const BannerSchema = new mongoose.Schema({
@@ -64,7 +76,11 @@ app.get('/api/banner', async (req, res) => {
     try {
         let banner = await Banner.findOne();
         if (!banner) {
-            banner = await Banner.create({ activo: false, link: 'https://youtube.com', mensaje: '¡Estamos transmitiendo en vivo ahora!' });
+            banner = await Banner.create({ 
+                activo: false, 
+                link: 'https://youtube.com', 
+                mensaje: '¡Estamos transmitiendo en vivo ahora!' 
+            });
         }
         res.json(banner);
     } catch (err) {
@@ -74,16 +90,77 @@ app.get('/api/banner', async (req, res) => {
 
 // ================= RUTAS PRIVADAS (Para el Admin) =================
 
-// Crear o Actualizar Actividad
+// Crear o Actualizar Actividad vía POST
 app.post('/api/actividades', checkAuth, async (req, res) => {
     try {
-        const { id, dia, hora, actividad, plataforma, link, estado } = req.body;
+        const { 
+            id, dia, diaSemana, hora, horaInicio, actividad, titulo, 
+            plataforma, link, linkTransmision, estado, 
+            imagenUrl, oradorFotoUrl, nombreOrador, esInvitado, descripcion 
+        } = req.body;
+
+        const data = {
+            dia: diaSemana || dia,
+            diaSemana: diaSemana || dia,
+            hora: horaInicio || hora,
+            horaInicio: horaInicio || hora,
+            actividad: titulo || actividad,
+            titulo: titulo || actividad,
+            plataforma,
+            link: linkTransmision || link,
+            linkTransmision: linkTransmision || link,
+            estado,
+            imagenUrl: imagenUrl || '',
+            oradorFotoUrl: oradorFotoUrl || '',
+            nombreOrador: nombreOrador || '',
+            esInvitado: !!esInvitado,
+            descripcion: descripcion || ''
+        };
+
         if (id) {
-            const actualizada = await Actividad.findByIdAndUpdate(id, { dia, hora, actividad, plataforma, link, estado }, { new: true });
+            const actualizada = await Actividad.findByIdAndUpdate(id, data, { new: true });
             return res.json(actualizada);
         }
-        const nueva = await Actividad.create({ dia, hora, actividad, plataforma, link, estado });
+
+        const nueva = await Actividad.create(data);
         res.json(nueva);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Actualizar Actividad vía PUT (por ID en URL)
+app.put('/api/actividades/:id', checkAuth, async (req, res) => {
+    try {
+        const { 
+            dia, diaSemana, hora, horaInicio, actividad, titulo, 
+            plataforma, link, linkTransmision, estado, 
+            imagenUrl, oradorFotoUrl, nombreOrador, esInvitado, descripcion 
+        } = req.body;
+
+        const data = {
+            dia: diaSemana || dia,
+            diaSemana: diaSemana || dia,
+            hora: horaInicio || hora,
+            horaInicio: horaInicio || hora,
+            actividad: titulo || actividad,
+            titulo: titulo || actividad,
+            plataforma,
+            link: linkTransmision || link,
+            linkTransmision: linkTransmision || link,
+            estado,
+            imagenUrl: imagenUrl || '',
+            oradorFotoUrl: oradorFotoUrl || '',
+            nombreOrador: nombreOrador || '',
+            esInvitado: !!esInvitado,
+            descripcion: descripcion || ''
+        };
+
+        const actualizada = await Actividad.findByIdAndUpdate(req.params.id, data, { new: true });
+        if (!actualizada) {
+            return res.status(404).json({ error: 'Actividad no encontrada' });
+        }
+        res.json(actualizada);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -92,8 +169,11 @@ app.post('/api/actividades', checkAuth, async (req, res) => {
 // Eliminar Actividad
 app.delete('/api/actividades/:id', checkAuth, async (req, res) => {
     try {
-        await Actividad.findByIdAndDelete(req.params.id);
-        res.json({ message: 'Actividad eliminada' });
+        const eliminada = await Actividad.findByIdAndDelete(req.params.id);
+        if (!eliminada) {
+            return res.status(404).json({ error: 'Actividad no encontrada' });
+        }
+        res.json({ message: 'Actividad eliminada correctamente' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
