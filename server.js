@@ -4,10 +4,19 @@ const cors = require('cors');
 
 const app = express();
 
+// CONFIGURACIÓN DE CORS COMPLETA PARA EVITAR ERRORES 405 Y PREFLIGHT (OPTIONS)
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret']
+}));
+
+// MANEJO EXPLÍCITO DE RESPUESTA PREFLIGHT PARA TODAS LAS RUTAS
+app.options('*', cors());
+
 // AUMENTAR LÍMITE PARA IMÁGENES EN BASE64
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-app.use(cors());
 
 // CONEXIÓN ROBUSTA A MONGODB ATLAS
 const RAW_MONGO_URI = process.env.MONGO_URI || "mongodb+srv://garciaborjabertha_db_user:ZA1QzbIcKgPs0SkV@cluster0.ywee9hu.mongodb.net/iglesia_db?appName=Cluster0";
@@ -65,6 +74,10 @@ const Media = mongoose.model('Media', MediaSchema);
 
 // Middleware para verificar clave Admin
 const checkAuth = (req, res, next) => {
+    // Permitir solicitudes preflight OPTIONS sin verificar el header
+    if (req.method === 'OPTIONS') {
+        return next();
+    }
     const secret = req.headers['x-admin-secret'];
     if (secret === ADMIN_SECRET) {
         next();
@@ -233,11 +246,15 @@ app.post('/api/media/weekly-video', checkAuth, async (req, res) => {
             media = await Media.create({ youtubeVideoId: videoId });
         }
 
-        res.json({ success: true, message: 'Video de la semana actualizado correctamente', videoId: media.youtubeVideoId });
+        res.json({ 
+            success: true, 
+            message: 'Video de la semana actualizado correctamente', 
+            videoId: media.youtubeVideoId 
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor corriendo en el puerto ${PORT}`));
