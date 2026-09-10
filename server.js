@@ -14,7 +14,7 @@ app.use(cors({
 // MANEJO EXPLÍCITO DE RESPUESTA PREFLIGHT PARA TODAS LAS RUTAS
 app.options('*', cors());
 
-// AUMENTAR LÍMITE PARA IMÁGENES EN BASE64
+// AUMENTAR LÍMITE PARA IMÁGENES EN BASE64 Y PETICIONES LARGAS
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -37,7 +37,8 @@ function extractYouTubeId(urlOrId) {
     return (match && match[2].length === 11) ? match[2] : urlOrId.trim();
 }
 
-// MODELOS DE DATOS
+// ================= MODELOS DE DATOS =================
+
 const ActividadSchema = new mongoose.Schema({
     dia: String,
     diaSemana: String,
@@ -68,9 +69,25 @@ const MediaSchema = new mongoose.Schema({
     youtubeVideoId: { type: String, default: 'dQw4w9WgXcQ' }
 }, { timestamps: true });
 
+// NUEVO: ESQUEMA PARA PETICIONES DE ORACIÓN
+const PeticionOracionSchema = new mongoose.Schema({
+    nombre: { type: String, required: true },
+    email: { type: String, default: '' },
+    telefono: { type: String, default: '' },
+    peticion: { type: String, required: true },
+    esPrivado: { type: Boolean, default: false },
+    estado: { 
+        type: String, 
+        enum: ['pendiente', 'en_oracion', 'respondida', 'archivada'], 
+        default: 'pendiente' 
+    },
+    respuestaAdmin: { type: String, default: '' }
+}, { timestamps: true });
+
 const Actividad = mongoose.model('Actividad', ActividadSchema);
 const Banner = mongoose.model('Banner', BannerSchema);
 const Media = mongoose.model('Media', MediaSchema);
+const PeticionOracion = mongoose.model('PeticionOracion', PeticionOracionSchema);
 
 // Middleware para verificar clave Admin
 const checkAuth = (req, res, next) => {
@@ -126,7 +143,50 @@ app.get('/api/media/weekly-video', async (req, res) => {
     }
 });
 
-// ================= RUTAS PRIVADAS =================
+// RUTAS PÚBLICAS DE PETICIONES DE ORACIÓN
+
+// Crear nueva petición desde la web pública
+app.post('/api/peticiones', async (req, res) => {
+    try {
+        const { nombre, email, telefono, peticion, esPrivado } = req.body;
+        
+        if (!nombre || !peticion) {
+            return res.status(400).json({ error: 'Nombre y petición son campos requeridos.' });
+        }
+
+        const nuevaPeticion = await PeticionOracion.create({
+            nombre,
+            email: email || '',
+            telefono: telefono || '',
+            peticion,
+            esPrivado: !!esPrivado
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Petición de oración enviada correctamente',
+            data: nuevaPeticion
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Obtener solo peticiones públicas para mostrar testimonial o muro de oración en la web (Opcional)
+app.get('/api/peticiones/publicas', async (req, res) => {
+    try {
+        const peticiones = await PeticionOracion.find({ esPrivado: false })
+            .select('nombre peticion createdAt estado')
+            .sort({ createdAt: -1 });
+        res.json(peticiones);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ================= RUTAS PRIVADAS (ADMIN) =================
+
+// ----- ACTIVIDADES -----
 
 app.post('/api/actividades', checkAuth, async (req, res) => {
     try {
@@ -214,6 +274,8 @@ app.delete('/api/actividades/:id', checkAuth, async (req, res) => {
     }
 });
 
+// ----- BANNER -----
+
 app.post('/api/banner', checkAuth, async (req, res) => {
     try {
         const { activo, link, mensaje } = req.body;
@@ -232,7 +294,8 @@ app.post('/api/banner', checkAuth, async (req, res) => {
     }
 });
 
-// Ruta privada para actualizar el video de la semana desde el Panel Admin
+// ----- MEDIA / VIDEO DE LA SEMANA -----
+
 app.post('/api/media/weekly-video', checkAuth, async (req, res) => {
     try {
         const { videoUrlOrId } = req.body;
@@ -255,6 +318,73 @@ app.post('/api/media/weekly-video', checkAuth, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ----- PETICIONES DE ORACIÓN (PANEL ADMIN) -----
+
+// Obtener todas las peticiones (con opción de filtrado por estado)
+app.get('/api/admin/peticiones', checkAuth, async (req, res) => {
+    try {
+        const { estado } = req.query;
+        const query = estado ? { estado } : {};
+        const peticiones = await PeticionOracion.find(query).sort({ createdAt: -1 });
+        res.json(peticiones);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Actualizar estado o agregar respuesta a una petición
+app.put('/api/admin/peticiones/:id', checkAuth, async (req, res) => {
+    try {
+        const { estado, respuestaAdmin } = req.body;
+        const updateData = {};
+        
+        if (estado) updateData.estado = estado;
+        if (respuestaAdmin !== undefined) updateData.respuestaAdmin = respuestaAdmin;
+
+        const actualizada = await PeticionOracion.findByIdAndUpdate(
+            req.params.id, 
+            updateData, 
+            { new: true }
+        );
+
+        if (!actualizada) {
+            return res.status(404).json({ error: 'Petición no encontrada' });
+        }
+        res.json(actualizada);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Eliminar una petición
+app.delete('/api/admin/peticiones/:id', checkAuth, async (req, res) => {
+    try {
+        const eliminada = await PeticionOracion.findByIdAndDelete(req.params.id);
+        if (!eliminada) {
+            return res.status(404).json({ error: 'Petición no encontrada' });
+        }
+        res.json({ message: 'Petición eliminada correctamente' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Resumen / Métricas para el Panel Admin
+app.get('/api/admin/peticiones/stats', checkAuth, async (req, res) => {
+    try {
+        const total = await PeticionOracion.countDocuments();
+        const pendientes = await PeticionOracion.countDocuments({ estado: 'pendiente' });
+        const enOracion = await PeticionOracion.countDocuments({ estado: 'en_oracion' });
+        const respondidas = await PeticionOracion.countDocuments({ estado: 'respondida' });
+
+        res.json({ total, pendientes, enOracion, respondidas });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ================= INICIALIZACIÓN DEL SERVIDOR =================
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Servidor corriendo en el puerto ${PORT}`));
