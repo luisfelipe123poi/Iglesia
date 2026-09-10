@@ -3,11 +3,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
-app.use(express.json());
+
+// AUMENTAR LÍMITE PARA IMÁGENES EN BASE64
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors());
 
 // CONEXIÓN ROBUSTA A MONGODB ATLAS
-// Limpia comillas dobles, simples y espacios accidentales del env o string por defecto
 const RAW_MONGO_URI = process.env.MONGO_URI || "mongodb+srv://garciaborjabertha_db_user:ZA1QzbIcKgPs0SkV@cluster0.ywee9hu.mongodb.net/iglesia_db?appName=Cluster0";
 const MONGO_URI = RAW_MONGO_URI.replace(/['"]+/g, '').trim();
 
@@ -20,24 +22,23 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || "ClaveSecretaIglesia2026";
 
 // MODELOS DE DATOS
 const ActividadSchema = new mongoose.Schema({
-    // Campos de compatibilidad y nombres principales
-    dia: String,           // Ej: "Domingo", "Especial"
-    diaSemana: String,     // Alias para la web
-    hora: String,          // Ej: "07:00 PM"
-    horaInicio: String,    // Alias para la web
-    actividad: String,     // Ej: "Culto Celebrativo"
-    titulo: String,        // Alias para la web
-    plataforma: String,    // Ej: "YouTube Live", "Zoom"
-    link: String,          // Ej: "https://..."
-    linkTransmision: String, // Alias para la web
-    estado: String,        // "EN VIVO", "PROXIMAMENTE", "CANCELADA"
+    dia: String,
+    diaSemana: String,
+    hora: String,
+    horaInicio: String,
+    actividad: String,
+    titulo: String,
+    plataforma: String,
+    link: String,
+    linkTransmision: String,
+    estado: String,
     
-    // Nuevos campos multimedia y del orador
-    imagenUrl: String,       // URL del banner o portada del evento
-    oradorFotoUrl: String,   // URL de la foto del predicador/orador
-    nombreOrador: String,    // Ej: "Pastor Principal / Apóstol Juan"
-    esInvitado: { type: Boolean, default: false }, // Indicador si es orador invitado
-    descripcion: String      // Resumen o detalles del tema
+    // Almacena las cadenas Base64 de las imágenes subidas
+    imagenUrl: String,       
+    oradorFotoUrl: String,   
+    nombreOrador: String,    
+    esInvitado: { type: Boolean, default: false }, 
+    descripcion: String      
 }, { timestamps: true });
 
 const BannerSchema = new mongoose.Schema({
@@ -59,9 +60,8 @@ const checkAuth = (req, res, next) => {
     }
 };
 
-// ================= RUTAS PÚBLICAS (Para la Web) =================
+// ================= RUTAS PÚBLICAS =================
 
-// Obtener todas las actividades
 app.get('/api/actividades', async (req, res) => {
     try {
         const actividades = await Actividad.find().sort({ createdAt: -1 });
@@ -71,7 +71,6 @@ app.get('/api/actividades', async (req, res) => {
     }
 });
 
-// Obtener estado del Banner En Vivo
 app.get('/api/banner', async (req, res) => {
     try {
         let banner = await Banner.findOne();
@@ -88,9 +87,8 @@ app.get('/api/banner', async (req, res) => {
     }
 });
 
-// ================= RUTAS PRIVADAS (Para el Admin) =================
+// ================= RUTAS PRIVADAS =================
 
-// Crear o Actualizar Actividad vía POST
 app.post('/api/actividades', checkAuth, async (req, res) => {
     try {
         const { 
@@ -129,7 +127,6 @@ app.post('/api/actividades', checkAuth, async (req, res) => {
     }
 });
 
-// Actualizar Actividad vía PUT (por ID en URL)
 app.put('/api/actividades/:id', checkAuth, async (req, res) => {
     try {
         const { 
@@ -166,7 +163,6 @@ app.put('/api/actividades/:id', checkAuth, async (req, res) => {
     }
 });
 
-// Eliminar Actividad
 app.delete('/api/actividades/:id', checkAuth, async (req, res) => {
     try {
         const eliminada = await Actividad.findByIdAndDelete(req.params.id);
@@ -179,7 +175,6 @@ app.delete('/api/actividades/:id', checkAuth, async (req, res) => {
     }
 });
 
-// Actualizar Banner En Vivo
 app.post('/api/banner', checkAuth, async (req, res) => {
     try {
         const { activo, link, mensaje } = req.body;
