@@ -384,6 +384,37 @@ app.get('/api/admin/peticiones/stats', checkAuth, async (req, res) => {
     }
 });
 
+// Ejemplo de rutas para la galería en Express.js
+let galeriaFotos = []; // O tu modelo de MongoDB para la galería
+
+// Obtener todas las fotos (GET)
+app.get('/api/galeria', (req, res) => {
+    res.json(galeriaFotos);
+});
+
+// Agregar una foto (POST - Protegido con clave de admin)
+app.post('/api/galeria', (req, res) => {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== 'ClaveSecretaIglesia2026') {
+        return res.status(403).json({ success: false, message: 'Clave de administrador incorrecta' });
+    }
+    
+    const nuevaFoto = { _id: Date.now().toString(), url: req.body.url, alt: req.body.alt };
+    galeriaFotos.push(nuevaFoto);
+    res.json({ success: true, foto: nuevaFoto });
+});
+
+// Eliminar una foto (DELETE - Protegido con clave de admin)
+app.delete('/api/galeria/:id', (req, res) => {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== 'ClaveSecretaIglesia2026') {
+        return res.status(403).json({ success: false, message: 'Clave de administrador incorrecta' });
+    }
+    
+    galeriaFotos = galeriaFotos.filter(f => f._id !== req.params.id);
+    res.json({ success: true });
+});
+
 // ================= INICIALIZACIÓN DEL SERVIDOR =================
 
 const PORT = process.env.PORT || 3000;
