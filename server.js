@@ -384,35 +384,50 @@ app.get('/api/admin/peticiones/stats', checkAuth, async (req, res) => {
     }
 });
 
-// Ejemplo de rutas para la galería en Express.js
-let galeriaFotos = []; // O tu modelo de MongoDB para la galería
+// ================= ESQUEMA Y RUTAS DE GALERÍA =================
 
-// Obtener todas las fotos (GET)
-app.get('/api/galeria', (req, res) => {
-    res.json(galeriaFotos);
+const GaleriaSchema = new mongoose.Schema({
+    url: { type: String, required: true },
+    alt: { type: String, default: '' }
+}, { timestamps: true });
+
+const Galeria = mongoose.model('Galeria', GaleriaSchema);
+
+// Ruta pública para obtener las fotos del carrusel
+app.get('/api/galeria', async (req, res) => {
+    try {
+        const fotos = await Galeria.find().sort({ createdAt: -1 });
+        res.json(fotos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// Agregar una foto (POST - Protegido con clave de admin)
-app.post('/api/galeria', (req, res) => {
-    const adminSecret = req.headers['x-admin-secret'];
-    if (adminSecret !== 'ClaveSecretaIglesia2026') {
-        return res.status(403).json({ success: false, message: 'Clave de administrador incorrecta' });
+// Ruta protegida para agregar una foto desde el panel admin
+app.post('/api/galeria', checkAuth, async (req, res) => {
+    try {
+        const { url, alt } = req.body;
+        if (!url) {
+            return res.status(400).json({ error: 'La URL de la imagen es obligatoria.' });
+        }
+        const nuevaFoto = await Galeria.create({ url, alt: alt || '' });
+        res.status(201).json({ success: true, foto: nuevaFoto });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    
-    const nuevaFoto = { _id: Date.now().toString(), url: req.body.url, alt: req.body.alt };
-    galeriaFotos.push(nuevaFoto);
-    res.json({ success: true, foto: nuevaFoto });
 });
 
-// Eliminar una foto (DELETE - Protegido con clave de admin)
-app.delete('/api/galeria/:id', (req, res) => {
-    const adminSecret = req.headers['x-admin-secret'];
-    if (adminSecret !== 'ClaveSecretaIglesia2026') {
-        return res.status(403).json({ success: false, message: 'Clave de administrador incorrecta' });
+// Ruta protegida para eliminar una foto desde el panel admin
+app.delete('/api/galeria/:id', checkAuth, async (req, res) => {
+    try {
+        const eliminada = await Galeria.findByIdAndDelete(req.params.id);
+        if (!eliminada) {
+            return res.status(404).json({ error: 'Foto no encontrada' });
+        }
+        res.json({ success: true, message: 'Foto eliminada correctamente' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    
-    galeriaFotos = galeriaFotos.filter(f => f._id !== req.params.id);
-    res.json({ success: true });
 });
 
 // ================= INICIALIZACIÓN DEL SERVIDOR =================
